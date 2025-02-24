@@ -1,6 +1,9 @@
 
 #include "MagneticSensorSPI.h"
 
+//CRC table for poly = x^4 + x^3 + x^2 + 1 (0x1d or 0b11101 or 29)
+const uint8_t crc4LookupTable[16] = {0, 13, 7, 10, 14, 3, 9, 4, 1, 12, 6, 11, 15, 2, 8, 5};
+
 /** Typical configuration for the 14bit AMS AS5147 magnetic sensor over SPI interface */
 MagneticSensorSPIConfig_s AS5147_SPI = {
   .spi_mode = SPI_MODE1,
@@ -9,7 +12,8 @@ MagneticSensorSPIConfig_s AS5147_SPI = {
   .angle_register = 0x3FFF,
   .data_start_bit = 13,
   .command_rw_bit = 14,
-  .command_parity_bit = 15
+  .command_parity_bit = 15,
+  .crc_type = NO_CRC
 };
 // AS5048 and AS5047 are the same as AS5147
 MagneticSensorSPIConfig_s AS5048_SPI = AS5147_SPI;
@@ -23,9 +27,33 @@ MagneticSensorSPIConfig_s MA730_SPI = {
   .angle_register = 0x0000,
   .data_start_bit = 15,
   .command_rw_bit = 0,  // not required
-  .command_parity_bit = 0 // parity not implemented
+  .command_parity_bit = 0, // parity not implemented
+  .crc_type = NO_CRC
 };
 
+/** Typical configuration for the 14bit MonolithicPower MA600 magnetic sensor over SPI interface */
+MagneticSensorSPIConfig_s MA600_SPI = {
+  .spi_mode = SPI_MODE0,
+  .clock_speed = 1000000,
+  .bit_resolution = 14,
+  .angle_register = 0x0000,
+  .data_start_bit = 15,
+  .command_rw_bit = 0,  // not required
+  .command_parity_bit = 0, // parity not implemented
+  .crc_type = NO_CRC
+};
+
+/** Typical configuration for the 16bit MonolithicPower MA900 magnetic sensor over SPI interface */
+MagneticSensorSPIConfig_s MA900_SPI = {
+  .spi_mode = SPI_MODE0,
+  .clock_speed = 1000000,
+  .bit_resolution = 16,
+  .angle_register = 0x036B,
+  .data_start_bit = 15,  // Included in angle_register
+  .command_rw_bit = 0,  // Included in angle_register
+  .command_parity_bit = 0, // parity not implemented
+  .crc_type = MA900_CRC // CRC needed for this sensor
+};
 
 // MagneticSensorSPI(int cs, float _bit_resolution, int _angle_register)
 //  cs              - SPI chip select pin
@@ -60,6 +88,7 @@ MagneticSensorSPI::MagneticSensorSPI(MagneticSensorSPIConfig_s config, int cs){
   command_parity_bit = config.command_parity_bit; // for backwards compatibilty
   command_rw_bit = config.command_rw_bit; // for backwards compatibilty
   data_start_bit = config.data_start_bit; // for backwards compatibilty
+  crc_type = config.crc_type;
 }
 
 void MagneticSensorSPI::init(SPIClass* _spi){
@@ -104,6 +133,35 @@ byte MagneticSensorSPI::spiCalcEvenParity(word value){
 	return cnt & 0x1;
 }
 
+/**
+ * Utility function used to add a computed crc at the end of a 12bit data
+ * Takes the 12bit data as uint16_t
+ * Returns the 16bit data  with a 4bit crc at the end (12bit data are shifted)
+ */
+uint16_t MagneticSensorSPI::appendCrc4(uint16_t data){
+  uint8_t crc4;                                   // 4-bit CRC (0-15)
+  uint16_t valueWithCrc;
+  // Compute CRC4
+
+  switch (this->crc_type)
+  {
+  case MA900_CRC:
+    crc4 = 10;                                      // Initial Value for CRC4 (Seed)
+    crc4 = (data>>8 & 0xF) ^ crc4LookupTable[crc4]; // 4 MSB first
+    crc4 = (data>>4 & 0xF) ^ crc4LookupTable[crc4]; // 
+    crc4 = (data>>0 & 0xF) ^ crc4LookupTable[crc4]; // 4 LSB
+    // Concatenate 12-bit data with CRC4
+    valueWithCrc = ((data<<4) | crc4);
+    break;
+  
+  default:
+    // No crc or unknown crc: not changing data
+    valueWithCrc = data;
+    break;
+  }
+  return valueWithCrc;   
+}
+
   /*
   * Read a register from the sensor
   * Takes the address of the register as a 16 bit word
@@ -120,24 +178,33 @@ word MagneticSensorSPI::read(word angle_register){
    	//Add a parity bit on the the MSB
   	command |= ((word)spiCalcEvenParity(command) << command_parity_bit);
   }
+  if (crc_type != NO_CRC){
+    command = (word)appendCrc4(command);
+  }
 
   //SPI - begin transaction
   spi->beginTransaction(settings);
-
-  //Send the command
   digitalWrite(chip_select_pin, LOW);
-  spi->transfer16(command);
-  digitalWrite(chip_select_pin,HIGH);
+
+  //For the MA900 sensor, the angle is already sent at the start of the communication
+  word register_value = spi->transfer16(command);
   
 #if defined(ESP_H) && defined(ARDUINO_ARCH_ESP32) // if ESP32 board
   delayMicroseconds(50); // why do we need to delay 50us on ESP32? In my experience no extra delays are needed, on any of the architectures I've tested...
 #else
   delayMicroseconds(1); // delay 1us, the minimum time possible in plain arduino. 350ns is the required time for AMS sensors, 80ns for MA730, MA702
 #endif
-
-  //Now read the response
-  digitalWrite(chip_select_pin, LOW);
-  word register_value = spi->transfer16(0x00);
+  
+  if (crc_type == MA900_CRC){
+    //Read the remaining 4bit value by sending bach the data recieved from first communication
+    word register_value2 = spi->transfer16(register_value);
+    //Gather data in one place
+    word angle_raw = (register_value&0xFFF0) + ((register_value2&0xF000)>>12);
+    register_value = angle_raw;
+  } else {
+    // Other sensors -> Read the response
+    register_value = spi->transfer16(0x00);
+  }
   digitalWrite(chip_select_pin, HIGH);
 
   //SPI - end transaction

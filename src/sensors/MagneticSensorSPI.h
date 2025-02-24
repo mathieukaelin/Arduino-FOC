@@ -10,6 +10,8 @@
 
 #define DEF_ANGLE_REGISTER 0x3FFF
 
+typedef enum {NO_CRC, MA900_CRC} crc_t;
+
 struct MagneticSensorSPIConfig_s  {
   int spi_mode;
   long clock_speed;
@@ -18,9 +20,10 @@ struct MagneticSensorSPIConfig_s  {
   int data_start_bit;
   int command_rw_bit;
   int command_parity_bit;
+  crc_t crc_type;
 };
 // typical configuration structures
-extern MagneticSensorSPIConfig_s AS5147_SPI,AS5048_SPI,AS5047_SPI, MA730_SPI;
+extern MagneticSensorSPIConfig_s AS5147_SPI,AS5048_SPI,AS5047_SPI, MA600_SPI, MA730_SPI, MA900_SPI;
 
 class MagneticSensorSPI: public Sensor{
  public:
@@ -65,6 +68,8 @@ class MagneticSensorSPI: public Sensor{
     word read(word angle_register);
     /** Calculate parity value  */
     byte spiCalcEvenParity(word value);
+    /** Append calculated 4bit crc **/
+    uint16_t appendCrc4(uint16_t data);
 
     /**
      * Function getting current angle register value
@@ -76,6 +81,7 @@ class MagneticSensorSPI: public Sensor{
     int command_parity_bit; //!< the bit where parity flag is stored in command
     int command_rw_bit; //!< the bit where read/write flag is stored in command
     int data_start_bit; //!< the the position of first bit
+    crc_t crc_type; //!< the crc type
 
     SPIClass* spi;
 };
