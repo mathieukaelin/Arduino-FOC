@@ -16,6 +16,14 @@ MagneticSensorI2CConfig_s AS5048_I2C = {
   .data_start_bit = 15
 };
 
+/** Typical configuration for the 12bit MT6701 magnetic sensor over I2C interface */
+MagneticSensorI2CConfig_s MT6701_I2C = {
+  .chip_address = 0x06, 
+  .bit_resolution = 14,
+  .angle_register = 0x03,
+  .data_start_bit = 15
+};
+
 
 // MagneticSensorI2C(uint8_t _chip_address, float _cpr, uint8_t _angle_register_msb)
 //  @param _chip_address  I2C chip address
@@ -28,12 +36,13 @@ MagneticSensorI2C::MagneticSensorI2C(uint8_t _chip_address, int _bit_resolution,
   // angle read register of the magnetic sensor
   angle_register_msb = _angle_register_msb;
   // register maximum value (counts per revolution)
-  cpr = pow(2, _bit_resolution);
+  cpr = _powtwo(_bit_resolution);
 
   // depending on the sensor architecture there are different combinations of
   // LSB and MSB register used bits
   // AS5600 uses 0..7 LSB and 8..11 MSB
   // AS5048 uses 0..5 LSB and 6..13 MSB
+  // MT6701 uses 0..5 LSB and 9..15 MSB
   // used bits in LSB
   lsb_used = _bit_resolution - _bits_used_msb;
   // extraction masks
@@ -48,7 +57,7 @@ MagneticSensorI2C::MagneticSensorI2C(MagneticSensorI2CConfig_s config){
   // angle read register of the magnetic sensor
   angle_register_msb = config.angle_register;
   // register maximum value (counts per revolution)
-  cpr = pow(2, config.bit_resolution);
+  cpr = _powtwo(config.bit_resolution);
 
   int bits_used_msb = config.data_start_bit - 7;
   lsb_used = config.bit_resolution - bits_used_msb;
@@ -56,6 +65,10 @@ MagneticSensorI2C::MagneticSensorI2C(MagneticSensorI2CConfig_s config){
   lsb_mask = (uint8_t)( (2 << lsb_used) - 1 );
   msb_mask = (uint8_t)( (2 << bits_used_msb) - 1 );
   wire = &Wire;
+}
+
+MagneticSensorI2C MagneticSensorI2C::AS5600() {
+  return {AS5600_I2C};
 }
 
 void MagneticSensorI2C::init(TwoWire* _wire){
@@ -95,7 +108,7 @@ int MagneticSensorI2C::read(uint8_t angle_reg_msb) {
   // notify the device that is aboout to be read
 	wire->beginTransmission(chip_address);
 	wire->write(angle_reg_msb);
-  wire->endTransmission(false);
+  currWireError = wire->endTransmission(false);
 
   // read the data msb and lsb
 	wire->requestFrom(chip_address, (uint8_t)2);
@@ -107,6 +120,7 @@ int MagneticSensorI2C::read(uint8_t angle_reg_msb) {
   // LSB and MSB register used bits
   // AS5600 uses 0..7 LSB and 8..11 MSB
   // AS5048 uses 0..5 LSB and 6..13 MSB
+  // MT6701 uses 0..5 LSB and 6..13 MSB
   readValue = ( readArray[1] &  lsb_mask );
 	readValue += ( ( readArray[0] & msb_mask ) << lsb_used );
 	return readValue;

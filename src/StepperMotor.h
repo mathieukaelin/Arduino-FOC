@@ -43,7 +43,7 @@ class StepperMotor: public FOCMotor
     StepperDriver* driver; 
 
     /**  Motor hardware init function */
-  	void init() override;
+  	int init() override;
     /** Motor disable function */
   	void disable() override;
     /** Motor enable function */
@@ -54,12 +54,8 @@ class StepperMotor: public FOCMotor
      * and aligning sensor's and motors' zero position 
      * 
      * - If zero_electric_offset parameter is set the alignment procedure is skipped
-     * 
-     * @param zero_electric_offset value of the sensors absolute position electrical offset in respect to motor's electrical 0 position.
-     * @param sensor_direction  sensor natural direction - default is CW
-     *
      */  
-    int initFOC( float zero_electric_offset = NOT_SET , Direction sensor_direction = Direction::CW) override;
+    int initFOC() override;
     /**
      * Function running FOC algorithm in real-time
      * it calculates the gets motor angle and sets the appropriate voltages 
@@ -77,8 +73,6 @@ class StepperMotor: public FOCMotor
      */
     void move(float target = NOT_SET) override;
     
-    float	Ualpha,Ubeta; //!< Phase voltages U alpha and U beta used for inverse Park and Clarke transform
-
   /**
     * Method using FOC to set Uq to the motor at the optimal angle
     * Heart of the FOC algorithm
@@ -95,6 +89,8 @@ class StepperMotor: public FOCMotor
     int alignSensor();
     /** Motor and sensor alignment to the sensors absolute 0 angle  */
     int absoluteZeroSearch();
+    /** Current sense and motor phase alignment */
+    int alignCurrentSense();
         
     // Open loop motion control    
     /**

@@ -4,6 +4,7 @@
 #include "Arduino.h"
 #include "common/base_classes/FOCMotor.h"
 #include "common/base_classes/Sensor.h"
+#include "common/base_classes/FOCDriver.h"
 #include "common/base_classes/BLDCDriver.h"
 #include "common/foc_utils.h"
 #include "common/time_utils.h"
@@ -39,7 +40,7 @@ class BLDCMotor: public FOCMotor
     BLDCDriver* driver; 
     
     /**  Motor hardware init function */
-  	void init() override;
+  	int init() override;
     /** Motor disable function */
   	void disable() override;
     /** Motor enable function */
@@ -49,7 +50,7 @@ class BLDCMotor: public FOCMotor
      * Function initializing FOC algorithm
      * and aligning sensor's and motors' zero position 
      */  
-    int initFOC( float zero_electric_offset = NOT_SET , Direction sensor_direction = Direction::CW) override;
+    int initFOC() override;
     /**
      * Function running FOC algorithm in real-time
      * it calculates the gets motor angle and sets the appropriate voltages 
@@ -69,8 +70,7 @@ class BLDCMotor: public FOCMotor
     void move(float target = NOT_SET) override;
     
     float Ua, Ub, Uc;//!< Current phase voltages Ua,Ub and Uc set to motor
-    float	Ualpha, Ubeta; //!< Phase voltages U alpha and U beta used for inverse Park and Clarke transform
-
+    
   /**
     * Method using FOC to set Uq to the motor at the optimal angle
     * Heart of the FOC algorithm

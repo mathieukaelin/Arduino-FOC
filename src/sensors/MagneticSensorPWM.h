@@ -32,6 +32,9 @@ class MagneticSensorPWM: public Sensor{
     void init();
 
     int pinPWM;
+    
+    // Interrupt-safe update
+    void update() override;
 
     // get current angle (rad)
     float getSensorAngle() override;
@@ -40,6 +43,8 @@ class MagneticSensorPWM: public Sensor{
     void handlePWM();
     void enableInterrupt(void (*doPWM)());
     unsigned long pulse_length_us;
+
+    unsigned int timeout_us = 1200;
 
   private:
     // raw count (typically in range of 0-1023)
@@ -62,6 +67,7 @@ class MagneticSensorPWM: public Sensor{
     // time tracking variables
     unsigned long last_call_us;
     // unsigned long pulse_length_us;
+    unsigned long pulse_timestamp;
     
 
 };

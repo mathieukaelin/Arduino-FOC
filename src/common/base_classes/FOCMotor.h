@@ -78,7 +78,7 @@ class FOCMotor
     FOCMotor();
 
     /**  Motor hardware init function */
-  	virtual void init()=0;
+  	virtual int init()=0;
     /** Motor disable function */
   	virtual void disable()=0;
     /** Motor enable function */
@@ -104,12 +104,8 @@ class FOCMotor
      * and aligning sensor's and motors' zero position 
      * 
      * - If zero_electric_offset parameter is set the alignment procedure is skipped
-     * 
-     * @param zero_electric_offset value of the sensors absolute position electrical offset in respect to motor's electrical 0 position.
-     * @param sensor_direction  sensor natural direction - default is CW
-     *
      */  
-    virtual int initFOC( float zero_electric_offset = NOT_SET , Direction sensor_direction = Direction::CW)=0; 
+    virtual int initFOC()=0;
     /**
      * Function running FOC algorithm in real-time
      * it calculates the gets motor angle and sets the appropriate voltages 
@@ -155,6 +151,7 @@ class FOCMotor
 
     // state variables
     float target; //!< current target value - depends of the controller
+    float feed_forward_velocity = 0.0f; //!< current feed forward velocity
   	float shaft_angle;//!< current motor angle
   	float electrical_angle;//!< current electrical angle
   	float shaft_velocity;//!< current motor velocity 
@@ -164,6 +161,8 @@ class FOCMotor
     DQVoltage_s voltage;//!< current d and q voltage set to the motor
     DQCurrent_s current;//!< current d and q current measured
     float voltage_bemf; //!< estimated backemf voltage (if provided KV constant)
+    float	Ualpha, Ubeta; //!< Phase voltages U alpha and U beta used for inverse Park and Clarke transform
+
 
     // motor configuration parameters
     float voltage_sensor_align;//!< sensor and motor align voltage parameter
@@ -208,7 +207,8 @@ class FOCMotor
     // sensor related variabels
     float sensor_offset; //!< user defined sensor zero offset
     float zero_electric_angle = NOT_SET;//!< absolute zero electric angle - if available
-    int sensor_direction = NOT_SET; //!< if sensor_direction == Direction::CCW then direction will be flipped to CW
+    Direction sensor_direction = Direction::UNKNOWN; //!< default is CW. if sensor_direction == Direction::CCW then direction will be flipped compared to CW. Set to UNKNOWN to set by calibration
+    bool pp_check_result = false; //!< the result of the PP check, if run during loopFOC
 
     /**
      * Function providing BLDCMotor class with the 
